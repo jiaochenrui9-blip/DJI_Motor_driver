@@ -1,0 +1,13 @@
+# CLion / JetBrains workspace files
+.idea/
+.run/
+
+# CMake build directories and generated firmware artifacts
+build/
+cmake-build-*/
+*.elf
+*.bin
+*.hex
+*.map
+*.obj
+*.d
