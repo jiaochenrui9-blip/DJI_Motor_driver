@@ -11,3 +11,18 @@ cmake-build-*/
 *.map
 *.obj
 *.d
+
+# Unused Cube/CMSIS packages retained locally by STM32CubeMX
+/Drivers/CMSIS/Core/
+/Drivers/CMSIS/Core_A/
+/Drivers/CMSIS/DAP/
+/Drivers/CMSIS/DSP/
+/Drivers/CMSIS/Documentation/
+/Drivers/CMSIS/NN/
+/Drivers/CMSIS/RTOS/
+/Drivers/CMSIS/RTOS2/
+/Drivers/CMSIS/LICENSE.txt
+/Drivers/CMSIS/Device/ST/STM32F4xx/LICENSE.txt
+/Drivers/CMSIS/Device/ST/STM32F4xx/Source/
+/Drivers/STM32F4xx_HAL_Driver/LICENSE.txt
+/Drivers/STM32F4xx_HAL_Driver/Src/
