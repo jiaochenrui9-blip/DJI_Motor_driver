@@ -47,6 +47,8 @@ add_executable(${CMAKE_PROJECT_NAME}
     Core/UserModules/Algorithm/PID.h
     Core/UserModules/BSP/can_bus.c
     Core/UserModules/BSP/can_bus.h
+    Core/UserModules/Devices/dji_gm6020.c
+    Core/UserModules/Devices/dji_gm6020.h
 )
 
 # Add STM32CubeMX generated sources

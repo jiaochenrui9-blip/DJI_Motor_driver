@@ -78,16 +78,23 @@ void MotorControl_SetTargetSpeed(DJI_Motor_t *motor, int16_t target_speed)
     }
     motor->speed.target_rpm = target_speed;
 }
+
 void MotorControl_SetMode(DJI_Motor_t *motor, MotorControlMode_e mode)
 {
     if (motor == NULL )
-
     {
         return;
     }
+    PID_Reset(&motor->speed.pid);
+    PID_Reset(&motor->position.pid);
+    motor->position.target_deg = 0;
+    motor->speed.target_rpm = 0;
+    motor->output_current = 0;
+    motor->target_current = 0;
 
     motor->mode = mode;
 }
+
 static void MotorControl_Disable_Update(DJI_Motor_t *motor)
 {
     PID_Reset(&motor->speed.pid);

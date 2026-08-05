@@ -31,6 +31,36 @@ HAL_StatusTypeDef CAN_Bus_ConfigStdIdList(CAN_HandleTypeDef *hcan,
     return HAL_CAN_ConfigFilter(hcan, &filter);
 }
 
+HAL_StatusTypeDef CAN_Bus_ConfigStdIdMask(CAN_HandleTypeDef *hcan,
+                                          uint32_t filter_bank,
+                                          uint32_t slave_start_bank,
+                                          uint16_t std_id,
+                                          uint16_t std_id_mask)
+{
+    CAN_FilterTypeDef filter = {0};
+
+    if ((hcan == NULL) || (std_id > 0x7FFU) ||
+        (std_id_mask > 0x7FFU))
+    {
+        return HAL_ERROR;
+    }
+
+    /* 0x200配合0x7F0，仅忽略ID的低4位，即接收0x200~0x20F。 */
+    filter.FilterBank = filter_bank;
+    filter.FilterMode = CAN_FILTERMODE_IDMASK;
+    filter.FilterScale = CAN_FILTERSCALE_32BIT;
+    filter.FilterIdHigh = (uint32_t)std_id << 5;
+    filter.FilterIdLow = 0U;
+    filter.FilterMaskIdHigh = (uint32_t)std_id_mask << 5;
+    /* 比较IDE和RTR位，只接收标准数据帧。 */
+    filter.FilterMaskIdLow = 0x0006U;
+    filter.FilterFIFOAssignment = CAN_FILTER_FIFO0;
+    filter.FilterActivation = ENABLE;
+    filter.SlaveStartFilterBank = slave_start_bank;
+
+    return HAL_CAN_ConfigFilter(hcan, &filter);
+}
+
 HAL_StatusTypeDef CAN_Bus_StartRxFifo0(CAN_HandleTypeDef *hcan)
 {
     HAL_StatusTypeDef status;

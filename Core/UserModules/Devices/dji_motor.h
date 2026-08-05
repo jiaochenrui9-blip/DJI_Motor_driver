@@ -9,7 +9,8 @@
 typedef enum
 {
     DJI_MOTOR_M3508 = 0,
-    DJI_MOTOR_M2006
+    DJI_MOTOR_M2006,
+    DJI_MOTOR_GM6020
 } DJI_MotorType_e;
 
 typedef enum
@@ -49,6 +50,10 @@ typedef struct
     DJI_MotorType_e type;
     MotorControlMode_e mode;
     uint8_t esc_id;
+
+    uint16_t tx_id;    // 0x200、0x1FF、0x1FE……
+    uint8_t tx_slot;   // 0~3
+    uint8_t enable;
 
     float reduction_ratio;
     int16_t current_limit;

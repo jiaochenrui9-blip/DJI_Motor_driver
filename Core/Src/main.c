@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "dji_motor_manager.h"
 #include "dji_m3508.h"
+#include "dji_gm6020.h"
 #include "motor_control.h"
 /* USER CODE END Includes */
 
@@ -35,8 +36,12 @@
 /* USER CODE BEGIN PD */
 /* 主循环每1ms更新一次轴控制并发送CAN电流。 */
 #define MOTOR_CONTROL_PERIOD_MS 1U
-/* 首次测试时，1号M3508的速度环目标值。 */
-#define MOTOR1_SPEED_TARGET_RPM 1000
+/* 六电机低速速度闭环测试目标。 */
+#define M3508_TEST_SPEED_RPM  100
+#define GM6020_TEST_SPEED_RPM  50
+
+#define M3508_TEST_CURRENT_LIMIT 4000.0f
+#define GM6020_TEST_CURRENT_LIMIT 1000.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -46,16 +51,18 @@
 
 /* Private variables ---------------------------------------------------------*/
 CAN_HandleTypeDef hcan1;
+CAN_HandleTypeDef hcan2;
+
 UART_HandleTypeDef huart6;
 
 /* USER CODE BEGIN PV */
-/* CAN1总线上的M3508管理器。 */
-static DJI_MotorManager_t dji_motor_manager;
+static DJI_MotorManager_t dji_motor_manager_can1;
+static DJI_MotorManager_t dji_motor_manager_can2;
+static DJI_Motor_t m3508_motors[4];
+static DJI_Motor_t gm6020_motors[2];
 
-/* 8个实际电机对象，数组下标0~7对应电机编号1~8。 */
-static DJI_Motor_t motors[DJI_MOTOR_COUNT];
-
-static volatile HAL_StatusTypeDef motor_tx_status = HAL_OK;
+static volatile HAL_StatusTypeDef motor_tx_status_can1 = HAL_OK;
+static volatile HAL_StatusTypeDef motor_tx_status_can2 = HAL_OK;
 
 static uint32_t last_motor_control_tick = 0U;
 
@@ -66,6 +73,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_CAN1_Init(void);
 static void MX_USART6_UART_Init(void);
+static void MX_CAN2_Init(void);
 /* USER CODE BEGIN PFP */
 
 /* USER CODE END PFP */
@@ -106,34 +114,53 @@ int main(void)
   MX_GPIO_Init();
   MX_CAN1_Init();
   MX_USART6_UART_Init();
+  MX_CAN2_Init();
   /* USER CODE BEGIN 2 */
-
-  if (DJI_MotorManager_Init(&dji_motor_manager, &hcan1) != HAL_OK)
+  if (DJI_MotorManager_Init(&dji_motor_manager_can1,&hcan1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  if (DJI_MotorManager_Init(&dji_motor_manager_can2,&hcan2) != HAL_OK)
   {
     Error_Handler();
   }
 
-  if (DJI_M3508_Register(&dji_motor_manager,&motors[0],1) != HAL_OK)
+  for (uint8_t index = 0U; index < 4U; ++index)
+  {
+    if ((DJI_M3508_Register(&dji_motor_manager_can1, &m3508_motors[index],
+                            index + 1U, 0x200U, index) != HAL_OK) ||
+        (MotorControl_Init(&m3508_motors[index], M3508_TEST_CURRENT_LIMIT,
+                           3.0f, 0.02f, 0.0f,
+                           15.0f, 0.0f, 0.0f) != HAL_OK))
+    {
+      Error_Handler();
+    }
+
+    MotorControl_SetMode(&m3508_motors[index], MOTOR_MODE_SPEED);
+    MotorControl_SetTargetSpeed(&m3508_motors[index], M3508_TEST_SPEED_RPM);
+  }
+
+  for (uint8_t index = 0U; index < 2U; ++index)
+  {
+    if ((DJI_GM6020_Register(&dji_motor_manager_can2, &gm6020_motors[index],
+                             index + 1U, 0x1FEU, index) != HAL_OK) ||
+        (MotorControl_Init(&gm6020_motors[index], GM6020_TEST_CURRENT_LIMIT,
+                           20.0f, 0.02f, 0.0f,
+                           15.0f, 0.0f, 0.0f) != HAL_OK))
+    {
+      Error_Handler();
+    }
+
+    MotorControl_SetMode(&gm6020_motors[index], MOTOR_MODE_SPEED);
+    MotorControl_SetTargetSpeed(&gm6020_motors[index], GM6020_TEST_SPEED_RPM);
+  }
+
+  if ((DJI_MotorManager_Start(&dji_motor_manager_can1) != HAL_OK) ||
+      (DJI_MotorManager_Start(&dji_motor_manager_can2) != HAL_OK))
   {
     Error_Handler();
   }
 
-  if (MotorControl_Init(&motors[0],
-                        4000,
-                        3.0f, 0.02f, 0.0f,
-                        15.0f, 0.0f, 0.0f) != HAL_OK)
-  {
-    Error_Handler();
-  }
-
-
-  MotorControl_SetMode(&motors[0],MOTOR_MODE_SPEED);
-  MotorControl_SetTargetSpeed(&motors[0], MOTOR1_SPEED_TARGET_RPM);
-
-  if (DJI_MotorManager_Start(&dji_motor_manager) != HAL_OK)
-  {
-    Error_Handler();
-  }
 
   /* USER CODE END 2 */
 
@@ -147,9 +174,20 @@ int main(void)
     {
       last_motor_control_tick = now_tick;
 
-      MotorControl_Update(&motors[0], now_tick);
-      motor_tx_status = DJI_MotorManager_SendCurrents(&dji_motor_manager);
+      for (uint8_t index = 0U; index < 4U; ++index)
+      {
+        MotorControl_Update(&m3508_motors[index], now_tick);
+      }
+
+      for (uint8_t index = 0U; index < 2U; ++index)
+      {
+        MotorControl_Update(&gm6020_motors[index], now_tick);
+      }
+
+      motor_tx_status_can1 = DJI_MotorManager_SendAll(&dji_motor_manager_can1);
+      motor_tx_status_can2 = DJI_MotorManager_SendAll(&dji_motor_manager_can2);
     }
+
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -209,6 +247,14 @@ void SystemClock_Config(void)
   */
 static void MX_CAN1_Init(void)
 {
+
+  /* USER CODE BEGIN CAN1_Init 0 */
+
+  /* USER CODE END CAN1_Init 0 */
+
+  /* USER CODE BEGIN CAN1_Init 1 */
+
+  /* USER CODE END CAN1_Init 1 */
   hcan1.Instance = CAN1;
   hcan1.Init.Prescaler = 3;
   hcan1.Init.Mode = CAN_MODE_NORMAL;
@@ -225,6 +271,80 @@ static void MX_CAN1_Init(void)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN CAN1_Init 2 */
+
+  /* USER CODE END CAN1_Init 2 */
+
+}
+
+/**
+  * @brief CAN2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_CAN2_Init(void)
+{
+
+  /* USER CODE BEGIN CAN2_Init 0 */
+
+  /* USER CODE END CAN2_Init 0 */
+
+  /* USER CODE BEGIN CAN2_Init 1 */
+
+  /* USER CODE END CAN2_Init 1 */
+  hcan2.Instance = CAN2;
+  hcan2.Init.Prescaler = 3;
+  hcan2.Init.Mode = CAN_MODE_NORMAL;
+  hcan2.Init.SyncJumpWidth = CAN_SJW_1TQ;
+  hcan2.Init.TimeSeg1 = CAN_BS1_9TQ;
+  hcan2.Init.TimeSeg2 = CAN_BS2_4TQ;
+  hcan2.Init.TimeTriggeredMode = DISABLE;
+  hcan2.Init.AutoBusOff = ENABLE;
+  hcan2.Init.AutoWakeUp = DISABLE;
+  hcan2.Init.AutoRetransmission = ENABLE;
+  hcan2.Init.ReceiveFifoLocked = DISABLE;
+  hcan2.Init.TransmitFifoPriority = DISABLE;
+  if (HAL_CAN_Init(&hcan2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN CAN2_Init 2 */
+
+  /* USER CODE END CAN2_Init 2 */
+
+}
+
+/**
+  * @brief USART6 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART6_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART6_Init 0 */
+
+  /* USER CODE END USART6_Init 0 */
+
+  /* USER CODE BEGIN USART6_Init 1 */
+
+  /* USER CODE END USART6_Init 1 */
+  huart6.Instance = USART6;
+  huart6.Init.BaudRate = 115200;
+  huart6.Init.WordLength = UART_WORDLENGTH_8B;
+  huart6.Init.StopBits = UART_STOPBITS_1;
+  huart6.Init.Parity = UART_PARITY_NONE;
+  huart6.Init.Mode = UART_MODE_TX_RX;
+  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart6) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART6_Init 2 */
+
+  /* USER CODE END USART6_Init 2 */
+
 }
 
 /**
@@ -239,7 +359,11 @@ static void MX_GPIO_Init(void)
   /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
+  __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOG_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
+  __HAL_RCC_GPIOD_CLK_ENABLE();
+  __HAL_RCC_GPIOH_CLK_ENABLE();
 
   /* USER CODE BEGIN MX_GPIO_Init_2 */
 
@@ -250,7 +374,14 @@ static void MX_GPIO_Init(void)
 /* HAL收到FIFO0消息后，把处理工作转交给M3508管理器。 */
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
 {
-  DJI_MotorManager_RxFifo0Callback(&dji_motor_manager, hcan);
+  if (hcan->Instance == CAN1)
+  {
+    DJI_MotorManager_RxFifo0Callback(&dji_motor_manager_can1, hcan);
+  }
+  else if (hcan->Instance == CAN2)
+  {
+    DJI_MotorManager_RxFifo0Callback(&dji_motor_manager_can2, hcan);
+  }
 }
 
 /**
@@ -258,21 +389,7 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef *hcan)
   * @param None
   * @retval None
   */
-static void MX_USART6_UART_Init(void)
-{
-  huart6.Instance = USART6;
-  huart6.Init.BaudRate = 115200;
-  huart6.Init.WordLength = UART_WORDLENGTH_8B;
-  huart6.Init.StopBits = UART_STOPBITS_1;
-  huart6.Init.Parity = UART_PARITY_NONE;
-  huart6.Init.Mode = UART_MODE_TX_RX;
-  huart6.Init.HwFlowCtl = UART_HWCONTROL_NONE;
-  huart6.Init.OverSampling = UART_OVERSAMPLING_16;
-  if (HAL_UART_Init(&huart6) != HAL_OK)
-  {
-    Error_Handler();
-  }
-}
+
 /* USER CODE END 4 */
 
 /**

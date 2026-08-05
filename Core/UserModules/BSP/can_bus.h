@@ -9,6 +9,16 @@ HAL_StatusTypeDef CAN_Bus_ConfigStdIdList(CAN_HandleTypeDef *hcan,
                                           uint32_t slave_start_bank,
                                           const uint16_t std_ids[4]);
 
+/*
+ * 配置32位掩码过滤器。
+ * 接收条件为：(标准ID & std_id_mask) == (std_id & std_id_mask)。
+ */
+HAL_StatusTypeDef CAN_Bus_ConfigStdIdMask(CAN_HandleTypeDef *hcan,
+                                          uint32_t filter_bank,
+                                          uint32_t slave_start_bank,
+                                          uint16_t std_id,
+                                          uint16_t std_id_mask);
+
 /* 启动CAN，并开启FIFO0有新消息中断。 */
 HAL_StatusTypeDef CAN_Bus_StartRxFifo0(CAN_HandleTypeDef *hcan);
 
