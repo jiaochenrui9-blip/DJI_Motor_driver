@@ -58,6 +58,9 @@ typedef struct
     float reduction_ratio;
     int16_t current_limit;
 
+    int8_t output_direction;    // 输出方向 / 控制方向
+    int8_t feedback_direction;  // 反馈方向 / 编码器方向
+
     volatile uint16_t encoder;
     volatile int16_t speed_rpm;
     volatile int16_t feedback_current;

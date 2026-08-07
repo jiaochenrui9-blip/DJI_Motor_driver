@@ -37,7 +37,7 @@
 /* 主循环每1ms更新一次轴控制并发送CAN电流。 */
 #define MOTOR_CONTROL_PERIOD_MS 1U
 /* 六电机低速速度闭环测试目标。 */
-#define M3508_TEST_SPEED_RPM  100
+#define M3508_TEST_SPEED_RPM  1000
 #define GM6020_TEST_SPEED_RPM  50
 
 #define M3508_TEST_CURRENT_LIMIT 4000.0f
@@ -130,6 +130,7 @@ int main(void)
     if ((DJI_M3508_Register(&dji_motor_manager_can1, &m3508_motors[index],
                             index + 1U, 0x200U, index) != HAL_OK) ||
         (MotorControl_Init(&m3508_motors[index], M3508_TEST_CURRENT_LIMIT,
+                           1, 1,
                            3.0f, 0.02f, 0.0f,
                            15.0f, 0.0f, 0.0f) != HAL_OK))
     {
@@ -145,6 +146,7 @@ int main(void)
     if ((DJI_GM6020_Register(&dji_motor_manager_can2, &gm6020_motors[index],
                              index + 1U, 0x1FEU, index) != HAL_OK) ||
         (MotorControl_Init(&gm6020_motors[index], GM6020_TEST_CURRENT_LIMIT,
+                           1, 1,
                            20.0f, 0.02f, 0.0f,
                            15.0f, 0.0f, 0.0f) != HAL_OK))
     {

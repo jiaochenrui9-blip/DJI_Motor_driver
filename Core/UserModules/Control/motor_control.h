@@ -3,7 +3,10 @@
 
 #include "dji_motor.h"
 
-HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor,float current_limit,float speed_kp,float speed_ki,float speed_kd,
+HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor, float current_limit,
+                                    int8_t output_direction,
+                                    int8_t feedback_direction,
+                                    float speed_kp, float speed_ki, float speed_kd,
                                     float pos_kp,float pos_ki,float pos_kd);
 
 void MotorControl_SetTargetDegree(DJI_Motor_t *motor, float target_degree);

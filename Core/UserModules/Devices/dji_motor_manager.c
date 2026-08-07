@@ -68,6 +68,8 @@ HAL_StatusTypeDef DJI_MotorManager_Register(DJI_MotorManager_t *manager,
     motor->esc_id = esc_id;
     motor->tx_id = tx_id;
     motor->tx_slot = tx_slot;
+    motor->output_direction = 1;
+    motor->feedback_direction = 1;
     manager->motors[manager->registered_count] = motor;
     manager->registered_count++;
     return HAL_OK;
@@ -126,7 +128,9 @@ HAL_StatusTypeDef DJI_MotorManager_SendAll(DJI_MotorManager_t *manager)
             continue;
         }
 
-        if (motor->tx_slot >= 4U)
+        if ((motor->tx_slot >= 4U) ||
+            ((motor->output_direction != 1) &&
+             (motor->output_direction != -1)))
         {
             return HAL_ERROR;
         }
@@ -138,7 +142,8 @@ HAL_StatusTypeDef DJI_MotorManager_SendAll(DJI_MotorManager_t *manager)
                 continue;
             }
 
-            output_current = (uint16_t)motor->output_current;
+            output_current = (uint16_t)(motor->output_current *
+                                        motor->output_direction);
             DJI_Frame_Send[frame][motor->tx_slot * 2U] =
                 (uint8_t)(output_current >> 8);
             DJI_Frame_Send[frame][motor->tx_slot * 2U + 1U] =
@@ -238,6 +243,12 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
         return;
     }
 
+    if ((motor->feedback_direction != 1) &&
+        (motor->feedback_direction != -1))
+    {
+        return;
+    }
+
     angle = DJI_MotorManager_ReadU16(&data[0]);
     if (motor->feedback_count == 0U)
     {
@@ -256,13 +267,15 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
             encoder_delta += 8192;
         }
 
-        motor->total_encoder += encoder_delta;
+        motor->total_encoder += encoder_delta * motor->feedback_direction;
         motor->last_encoder = (int16_t)angle;
     }
 
     motor->encoder = angle;
-    motor->speed_rpm = DJI_MotorManager_ReadS16(&data[2]);
-    motor->feedback_current = DJI_MotorManager_ReadS16(&data[4]);
+    motor->speed_rpm = DJI_MotorManager_ReadS16(&data[2]) *
+                       motor->feedback_direction;
+    motor->feedback_current = DJI_MotorManager_ReadS16(&data[4]) *
+                              motor->feedback_direction;
     motor->temperature = (motor->type == DJI_MOTOR_M3508 || motor->type == DJI_MOTOR_GM6020) ? data[6] : 0U;
     motor->last_feedback_tick = HAL_GetTick();
     motor->feedback_count++;

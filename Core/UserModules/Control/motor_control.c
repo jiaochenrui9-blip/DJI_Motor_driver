@@ -3,6 +3,8 @@
 /* 当前位置-速度串级控制参数。 */
 #define MOTOR_CONTROL_POSITION_PERIOD_MS          5U
 #define MOTOR_CONTROL_OFFLINE_TIMEOUT_MS        100U
+#define MOTOR_CONTROL_SPEED_PERIOD_S          0.001f
+#define MOTOR_CONTROL_POSITION_PERIOD_S       0.005f
 
 #define MOTOR_CONTROL_ENCODER_COUNTS_PER_REV 8192.0f
 
@@ -15,8 +17,8 @@
 #define MOTOR_CONTROL_SPEED_KP                   3.0f
 #define MOTOR_CONTROL_SPEED_KI                   0.02f
 #define MOTOR_CONTROL_SPEED_KD                   0.0f
-#define MOTOR_CONTROL_SPEED_INTEGRAL_LIMIT   30000.0f
-#define MOTOR_CONTROL_POSITION_INTEGRAL_LIMIT 50000.0f
+#define SPEED_PID_I_OUTPUT_LIMIT              1000.0f
+#define POSITION_PID_I_OUTPUT_LIMIT           3000.0f
 
 static float MotorControl_EncoderToOutputDegree(const DJI_Motor_t *motor,
                                                 int32_t encoder_delta)
@@ -25,16 +27,23 @@ static float MotorControl_EncoderToOutputDegree(const DJI_Motor_t *motor,
            (MOTOR_CONTROL_ENCODER_COUNTS_PER_REV * motor->reduction_ratio);
 }
 
-HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor,float current_limit,float speed_kp,float speed_ki,float speed_kd,
-                                    float pos_kp,float pos_ki,float pos_kd)
+HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor, float current_limit,
+                                    int8_t output_direction,
+                                    int8_t feedback_direction,
+                                    float speed_kp, float speed_ki, float speed_kd,
+                                    float pos_kp, float pos_ki, float pos_kd)
 {
     if ((motor == NULL) || (motor->esc_id == 0U) ||
-        (motor->reduction_ratio <= 0.0f))
+        (motor->reduction_ratio <= 0.0f) ||
+        ((output_direction != 1) && (output_direction != -1)) ||
+        ((feedback_direction != 1) && (feedback_direction != -1)))
     {
         return HAL_ERROR;
     }
 
     motor->current_limit = (int16_t)current_limit;
+    motor->output_direction = output_direction;
+    motor->feedback_direction = feedback_direction;
 
     PID_Init(&motor->speed.pid,
              speed_kp,
@@ -42,8 +51,8 @@ HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor,float current_limit,float
              speed_kd,
              -current_limit,
              current_limit,
-             -MOTOR_CONTROL_SPEED_INTEGRAL_LIMIT,
-             MOTOR_CONTROL_SPEED_INTEGRAL_LIMIT);
+             -SPEED_PID_I_OUTPUT_LIMIT,
+             SPEED_PID_I_OUTPUT_LIMIT);
 
     PID_Init(&motor->position.pid,
              pos_kp,
@@ -51,8 +60,8 @@ HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor,float current_limit,float
              pos_kd,
              -MOTOR_CONTROL_POSITION_SPEED_LIMIT,
              MOTOR_CONTROL_POSITION_SPEED_LIMIT,
-             -MOTOR_CONTROL_POSITION_INTEGRAL_LIMIT,
-             MOTOR_CONTROL_POSITION_INTEGRAL_LIMIT);
+             -POSITION_PID_I_OUTPUT_LIMIT,
+             POSITION_PID_I_OUTPUT_LIMIT);
 
     motor->speed.target_rpm = 0.0f;
     motor->position.target_deg = 0.0f;
@@ -70,6 +79,18 @@ void MotorControl_SetTargetDegree(DJI_Motor_t *motor, float target_degree)
     }
 }
 
+static void Motor_Offline_Update(DJI_Motor_t* motor)
+{
+    if (motor == NULL)
+    {
+        return;
+    }
+
+    PID_Reset(&motor->speed.pid);
+    PID_Reset(&motor->position.pid);
+
+    motor->output_current = 0;
+}
 void MotorControl_SetTargetSpeed(DJI_Motor_t *motor, int16_t target_speed)
 {
     if  (motor == NULL )
@@ -120,7 +141,8 @@ static void MotorControl_Speed_Update(DJI_Motor_t *motor)
 {
     PID_SetTarget(&motor->speed.pid, motor->speed.target_rpm);
     motor->output_current = (int16_t)PID_Calculate(
-        &motor->speed.pid, (float)motor->speed_rpm);
+        &motor->speed.pid, (float)motor->speed_rpm,
+        MOTOR_CONTROL_SPEED_PERIOD_S);
 }
 
 static void MotorControl_Position_Update(DJI_Motor_t *motor,
@@ -155,7 +177,8 @@ static void MotorControl_Position_Update(DJI_Motor_t *motor,
         else
         {
             motor->speed.target_rpm = PID_Calculate(
-                &motor->position.pid, now_degree);
+                &motor->position.pid, now_degree,
+                MOTOR_CONTROL_POSITION_PERIOD_S);
         }
 
         motor->position.last_update_tick = now_tick;
@@ -163,7 +186,8 @@ static void MotorControl_Position_Update(DJI_Motor_t *motor,
 
     PID_SetTarget(&motor->speed.pid, motor->speed.target_rpm);
     motor->output_current = (int16_t)PID_Calculate(
-        &motor->speed.pid, (float)motor->speed_rpm);
+        &motor->speed.pid, (float)motor->speed_rpm,
+        MOTOR_CONTROL_SPEED_PERIOD_S);
 }
 
 void MotorControl_Update(DJI_Motor_t *motor, uint32_t now_tick)
@@ -176,7 +200,7 @@ void MotorControl_Update(DJI_Motor_t *motor, uint32_t now_tick)
     if (DJI_Motor_IsOnline(motor, now_tick,
                            MOTOR_CONTROL_OFFLINE_TIMEOUT_MS) == 0U)
     {
-        MotorControl_Disable_Update(motor);
+        Motor_Offline_Update(motor);
         return;
     }
 
