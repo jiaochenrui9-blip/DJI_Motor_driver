@@ -132,8 +132,7 @@ int main(void)
   for (uint8_t index = 0U; index < 4U; ++index)
   {
     if ((DJI_M3508_Register(&dji_motor_manager_can1, &m3508_motors[index],
-                            index + 1U, 0x201U + index,
-                            0x200U, index) != HAL_OK) ||
+                             index + 1U, 0x200U, index) != HAL_OK) ||
         (MotorControl_Init(&m3508_motors[index], M3508_TEST_CURRENT_LIMIT,
                            1, 1,
                            3.0f, 0.02f, 0.0f,
@@ -149,8 +148,7 @@ int main(void)
   for (uint8_t index = 0U; index < 2U; ++index)
   {
     if ((DJI_GM6020_Register(&dji_motor_manager_can2, &gm6020_motors[index],
-                             index + 1U, 0x205U + index,
-                             0x1FEU, index) != HAL_OK) ||
+                              index + 1U, 0x1FEU, index) != HAL_OK) ||
         (MotorControl_Init(&gm6020_motors[index], GM6020_TEST_CURRENT_LIMIT,
                            1, 1,
                            20.0f, 0.02f, 0.0f,
@@ -166,8 +164,7 @@ int main(void)
   for (uint8_t index = 0U; index < 2U; ++index)
   {
     if ((DJI_M2006_Register(&dji_motor_manager_can2, &m2006_motors[index],
-                            index + 1U, 0x201U + index,
-                            0x200U, index) != HAL_OK) ||
+                             index + 1U, 0x200U, index) != HAL_OK) ||
         (MotorControl_Init(&m2006_motors[index], M2006_TEST_CURRENT_LIMIT,
                            1, 1,
                            3.0f, 0.02f, 0.0f,
