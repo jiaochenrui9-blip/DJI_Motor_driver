@@ -26,13 +26,16 @@ HAL_StatusTypeDef DJI_MotorManager_Init(DJI_MotorManager_t *manager,
 HAL_StatusTypeDef DJI_MotorManager_Register(DJI_MotorManager_t *manager,
                                             DJI_Motor_t *motor,
                                             uint8_t esc_id,
+                                            uint16_t feedback_id,
                                             uint16_t tx_id,
                                             uint8_t tx_slot)
 {
     uint8_t frame;
 
     if ((manager == NULL) || (manager->hcan == NULL) || (motor == NULL) ||
-        (esc_id < 1U) || (esc_id > DJI_MOTOR_COUNT) || (tx_slot >= 4U))
+        (esc_id < 1U) || (esc_id > DJI_MOTOR_COUNT) ||
+        (feedback_id < 0x201U) || (feedback_id > 0x20FU) ||
+        (tx_slot >= 4U))
     {
         return HAL_ERROR;
     }
@@ -56,7 +59,7 @@ HAL_StatusTypeDef DJI_MotorManager_Register(DJI_MotorManager_t *manager,
         DJI_Motor_t *registered_motor = manager->motors[index];
 
         if ((registered_motor != NULL) &&
-            ((registered_motor->esc_id == esc_id) ||
+            ((registered_motor->feedback_id == feedback_id) ||
              ((registered_motor->tx_id == tx_id) &&
               (registered_motor->tx_slot == tx_slot))))
         {
@@ -66,6 +69,7 @@ HAL_StatusTypeDef DJI_MotorManager_Register(DJI_MotorManager_t *manager,
 
     *motor = (DJI_Motor_t){0};
     motor->esc_id = esc_id;
+    motor->feedback_id = feedback_id;
     motor->tx_id = tx_id;
     motor->tx_slot = tx_slot;
     motor->output_direction = 1;
@@ -181,7 +185,6 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
     CAN_RxHeaderTypeDef header;
     DJI_Motor_t *motor;
     uint8_t data[8];
-    uint8_t motor_id;
     uint8_t index;
     uint16_t angle;
     int32_t encoder_delta;
@@ -203,35 +206,11 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
         return;
     }
 
-    if (hcan->Instance == CAN1)
-    {
-        if ((header.StdId < DJI_MOTOR_FEEDBACK_ID_FIRST) ||
-            (header.StdId > DJI_MOTOR_FEEDBACK_ID_LAST))
-        {
-            return;
-        }
-
-        motor_id = (uint8_t)(header.StdId - 0x200U);
-    }
-    else if (hcan->Instance == CAN2)
-    {
-        if ((header.StdId < 0x205U) || (header.StdId > 0x20BU))
-        {
-            return;
-        }
-
-        motor_id = (uint8_t)(header.StdId - 0x204U);
-    }
-    else
-    {
-        return;
-    }
-
     motor = NULL;
-    for (index = 0U; index < DJI_MOTOR_COUNT; ++index)
+    for (index = 0U; index < manager->registered_count; ++index)
     {
         if ((manager->motors[index] != NULL) &&
-            (manager->motors[index]->esc_id == motor_id))
+            (manager->motors[index]->feedback_id == header.StdId))
         {
             motor = manager->motors[index];
             break;

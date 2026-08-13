@@ -9,6 +9,6 @@
 #include "dji_motor.h"
 #define DJI_GM6020_MAX_CURRENT_LIMIT 16384
 
-HAL_StatusTypeDef DJI_GM6020_Register(DJI_MotorManager_t* manager,DJI_Motor_t *motor,uint8_t motor_id,uint16_t tx_id,
+HAL_StatusTypeDef DJI_GM6020_Register(DJI_MotorManager_t* manager,DJI_Motor_t *motor,uint8_t motor_id,uint16_t feedback_id,uint16_t tx_id,
                                     uint8_t tx_slot);
 #endif //INC_3508_DJI_GM6020_H

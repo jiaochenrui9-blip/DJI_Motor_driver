@@ -50,6 +50,7 @@ typedef struct
     DJI_MotorType_e type;
     MotorControlMode_e mode;
     uint8_t esc_id;
+    uint16_t feedback_id;
 
     uint16_t tx_id;    // 0x200、0x1FF、0x1FE……
     uint8_t tx_slot;   // 0~3

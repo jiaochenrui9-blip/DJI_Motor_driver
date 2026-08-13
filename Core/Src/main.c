@@ -23,6 +23,7 @@
 /* USER CODE BEGIN Includes */
 #include "dji_motor_manager.h"
 #include "dji_m3508.h"
+#include "dji_m2006.h"
 #include "dji_gm6020.h"
 #include "motor_control.h"
 /* USER CODE END Includes */
@@ -36,12 +37,14 @@
 /* USER CODE BEGIN PD */
 /* 主循环每1ms更新一次轴控制并发送CAN电流。 */
 #define MOTOR_CONTROL_PERIOD_MS 1U
-/* 六电机低速速度闭环测试目标。 */
+/* 八电机低速速度闭环测试目标。 */
 #define M3508_TEST_SPEED_RPM  1000
 #define GM6020_TEST_SPEED_RPM  50
+#define M2006_TEST_SPEED_RPM   100
 
 #define M3508_TEST_CURRENT_LIMIT 4000.0f
 #define GM6020_TEST_CURRENT_LIMIT 1000.0f
+#define M2006_TEST_CURRENT_LIMIT 2000.0f
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -60,6 +63,7 @@ static DJI_MotorManager_t dji_motor_manager_can1;
 static DJI_MotorManager_t dji_motor_manager_can2;
 static DJI_Motor_t m3508_motors[4];
 static DJI_Motor_t gm6020_motors[2];
+static DJI_Motor_t m2006_motors[2];
 
 static volatile HAL_StatusTypeDef motor_tx_status_can1 = HAL_OK;
 static volatile HAL_StatusTypeDef motor_tx_status_can2 = HAL_OK;
@@ -128,7 +132,8 @@ int main(void)
   for (uint8_t index = 0U; index < 4U; ++index)
   {
     if ((DJI_M3508_Register(&dji_motor_manager_can1, &m3508_motors[index],
-                            index + 1U, 0x200U, index) != HAL_OK) ||
+                            index + 1U, 0x201U + index,
+                            0x200U, index) != HAL_OK) ||
         (MotorControl_Init(&m3508_motors[index], M3508_TEST_CURRENT_LIMIT,
                            1, 1,
                            3.0f, 0.02f, 0.0f,
@@ -144,7 +149,8 @@ int main(void)
   for (uint8_t index = 0U; index < 2U; ++index)
   {
     if ((DJI_GM6020_Register(&dji_motor_manager_can2, &gm6020_motors[index],
-                             index + 1U, 0x1FEU, index) != HAL_OK) ||
+                             index + 1U, 0x205U + index,
+                             0x1FEU, index) != HAL_OK) ||
         (MotorControl_Init(&gm6020_motors[index], GM6020_TEST_CURRENT_LIMIT,
                            1, 1,
                            20.0f, 0.02f, 0.0f,
@@ -155,6 +161,23 @@ int main(void)
 
     MotorControl_SetMode(&gm6020_motors[index], MOTOR_MODE_SPEED);
     MotorControl_SetTargetSpeed(&gm6020_motors[index], GM6020_TEST_SPEED_RPM);
+  }
+
+  for (uint8_t index = 0U; index < 2U; ++index)
+  {
+    if ((DJI_M2006_Register(&dji_motor_manager_can2, &m2006_motors[index],
+                            index + 1U, 0x201U + index,
+                            0x200U, index) != HAL_OK) ||
+        (MotorControl_Init(&m2006_motors[index], M2006_TEST_CURRENT_LIMIT,
+                           1, 1,
+                           3.0f, 0.02f, 0.0f,
+                           15.0f, 0.0f, 0.0f) != HAL_OK))
+    {
+      Error_Handler();
+    }
+
+    MotorControl_SetMode(&m2006_motors[index], MOTOR_MODE_SPEED);
+    MotorControl_SetTargetSpeed(&m2006_motors[index], M2006_TEST_SPEED_RPM);
   }
 
   if ((DJI_MotorManager_Start(&dji_motor_manager_can1) != HAL_OK) ||
@@ -184,6 +207,7 @@ int main(void)
       for (uint8_t index = 0U; index < 2U; ++index)
       {
         MotorControl_Update(&gm6020_motors[index], now_tick);
+        MotorControl_Update(&m2006_motors[index], now_tick);
       }
 
       motor_tx_status_can1 = DJI_MotorManager_SendAll(&dji_motor_manager_can1);
