@@ -72,8 +72,7 @@ HAL_StatusTypeDef DJI_MotorManager_Register(DJI_MotorManager_t *manager,
     motor->feedback_id = feedback_id;
     motor->tx_id = tx_id;
     motor->tx_slot = tx_slot;
-    motor->output_direction = 1;
-    motor->feedback_direction = 1;
+    motor->motor_direction = 1;
     manager->motors[manager->registered_count] = motor;
     manager->registered_count++;
     return HAL_OK;
@@ -133,8 +132,8 @@ HAL_StatusTypeDef DJI_MotorManager_SendAll(DJI_MotorManager_t *manager)
         }
 
         if ((motor->tx_slot >= 4U) ||
-            ((motor->output_direction != 1) &&
-             (motor->output_direction != -1)))
+            ((motor->motor_direction != 1) &&
+             (motor->motor_direction != -1)))
         {
             return HAL_ERROR;
         }
@@ -147,7 +146,7 @@ HAL_StatusTypeDef DJI_MotorManager_SendAll(DJI_MotorManager_t *manager)
             }
 
             output_current = (uint16_t)(motor->output_current *
-                                        motor->output_direction);
+                                        motor->motor_direction);
             DJI_Frame_Send[frame][motor->tx_slot * 2U] =
                 (uint8_t)(output_current >> 8);
             DJI_Frame_Send[frame][motor->tx_slot * 2U + 1U] =
@@ -193,7 +192,7 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
     {
         return;
     }
-
+    //每次取一帧即可，因为只要FIFO里有数据，中断就会一直挂着，这一帧接受完之后下次会立刻进中断，但FIFO不要溢出
     if (CAN_Bus_ReadFifo0(hcan, &header, data) != HAL_OK)
     {
         return;
@@ -222,8 +221,8 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
         return;
     }
 
-    if ((motor->feedback_direction != 1) &&
-        (motor->feedback_direction != -1))
+    if ((motor->motor_direction != 1) &&
+        (motor->motor_direction != -1))
     {
         return;
     }
@@ -236,6 +235,7 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
     }
     else
     {
+        //前提是中间最好不要丢太多帧，否则也会表现为跳变，导致总编码器计算不准确
         encoder_delta = (int32_t)angle - (int32_t)motor->last_encoder;
         if (encoder_delta > 4096)
         {
@@ -246,15 +246,15 @@ void DJI_MotorManager_RxFifo0Callback(DJI_MotorManager_t *manager,
             encoder_delta += 8192;
         }
 
-        motor->total_encoder += encoder_delta * motor->feedback_direction;
+        motor->total_encoder += encoder_delta * motor->motor_direction;
         motor->last_encoder = (int16_t)angle;
     }
 
     motor->encoder = angle;
     motor->speed_rpm = DJI_MotorManager_ReadS16(&data[2]) *
-                       motor->feedback_direction;
+                       motor->motor_direction;
     motor->feedback_current = DJI_MotorManager_ReadS16(&data[4]) *
-                              motor->feedback_direction;
+                              motor->motor_direction;
     motor->temperature = (motor->type == DJI_MOTOR_M3508 || motor->type == DJI_MOTOR_GM6020) ? data[6] : 0U;
     motor->last_feedback_tick = HAL_GetTick();
     motor->feedback_count++;

@@ -69,6 +69,7 @@ float PID_Calculate(PID_t *pid, float actual, float dt)
     /*
      * D：对测量值微分
      * actual增加 → D为负 → 提供阻尼
+     * 卸掉微分冲击
      */
     float D_term =
         -pid->Kd *

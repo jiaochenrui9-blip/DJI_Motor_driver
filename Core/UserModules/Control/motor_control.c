@@ -28,22 +28,19 @@ static float MotorControl_EncoderToOutputDegree(const DJI_Motor_t *motor,
 }
 
 HAL_StatusTypeDef MotorControl_Init(DJI_Motor_t *motor, float current_limit,
-                                    int8_t output_direction,
-                                    int8_t feedback_direction,
+                                    int8_t motor_direction,
                                     float speed_kp, float speed_ki, float speed_kd,
                                     float pos_kp, float pos_ki, float pos_kd)
 {
     if ((motor == NULL) || (motor->esc_id == 0U) ||
         (motor->reduction_ratio <= 0.0f) ||
-        ((output_direction != 1) && (output_direction != -1)) ||
-        ((feedback_direction != 1) && (feedback_direction != -1)))
+        ((motor_direction != 1) && (motor_direction != -1)))
     {
         return HAL_ERROR;
     }
 
     motor->current_limit = (int16_t)current_limit;
-    motor->output_direction = output_direction;
-    motor->feedback_direction = feedback_direction;
+    motor->motor_direction = motor_direction;
 
     PID_Init(&motor->speed.pid,
              speed_kp,
